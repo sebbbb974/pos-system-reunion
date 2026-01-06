@@ -1,0 +1,180 @@
+@import 'tailwindcss';
+
+/* Theme personnalisé pour TailwindCSS v4 */
+@theme {
+  /* Couleurs personnalisées */
+  --color-pos-dark: #1a1a2e;
+  --color-pos-darker: #16213e;
+  --color-pos-accent: #0f3460;
+  --color-pos-primary: #e94560;
+  --color-pos-text: #eaeaea;
+  --color-pos-success: #4ade80;
+  --color-pos-warning: #fbbf24;
+  --color-pos-danger: #ef4444;
+  --color-pos-info: #3b82f6;
+
+  /* Catégories */
+  --color-cat-repas: #ef4444;
+  --color-cat-boissons: #3b82f6;
+  --color-cat-desserts: #f97316;
+  --color-cat-sandwichs: #eab308;
+  --color-cat-glaces: #06b6d4;
+  --color-cat-formules: #8b5cf6;
+}
+
+/* Variables CSS pour le reste de l'application */
+:root {
+  --pos-dark: #1a1a2e;
+  --pos-darker: #16213e;
+  --pos-accent: #0f3460;
+  --pos-primary: #e94560;
+  --pos-text: #eaeaea;
+  --pos-success: #4ade80;
+  --pos-warning: #fbbf24;
+  --pos-danger: #ef4444;
+}
+
+/* Reset et styles de base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', 'Roboto', system-ui, sans-serif;
+  background-color: var(--pos-dark);
+  color: var(--pos-text);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Styles pour écran tactile */
+button, .touchable {
+  touch-action: manipulation;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+button:active, .touchable:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--pos-darker);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pos-accent);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pos-primary);
+}
+
+/* Animation pour les notifications */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Grille de produits responsive */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+/* Bouton produit */
+.product-btn {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.product-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.product-btn:active {
+  transform: scale(0.95);
+}
+
+/* Pavé numérique */
+.numpad-btn {
+  min-height: 4rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  border: none;
+  background: var(--pos-accent);
+  color: var(--pos-text);
+  transition: all 0.1s ease;
+}
+
+.numpad-btn:active {
+  background: var(--pos-primary);
+  transform: scale(0.95);
+}
+
+/* Ticket de caisse */
+.ticket-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ticket-item:last-child {
+  border-bottom: none;
+}

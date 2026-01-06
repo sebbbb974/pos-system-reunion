@@ -1,0 +1,597 @@
+import type { Product } from '$lib/types';
+
+// Produits de démonstration pour La Réunion
+// TVA Réunion : 2.1% (restauration/alimentaire) | 8.5% (alcool)
+export const defaultProducts: Product[] = [
+  // REPAS - TVA 2.1%
+  {
+    id: 'rep-001',
+    name: 'Barquette',
+    price: 8.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 50,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-002',
+    name: 'Plats Spéciaux',
+    price: 9.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 30,
+    minStock: 5,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-003',
+    name: 'Plats Spéciaux 2',
+    price: 9.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 30,
+    minStock: 5,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-004',
+    name: 'Saute-Mine',
+    price: 8.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 40,
+    minStock: 8,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-005',
+    name: 'Formule Repas',
+    price: 9.90,
+    category: 'formules',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 100,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-006',
+    name: 'Riz/Grain',
+    price: 3.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 60,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-007',
+    name: 'Carry Poulet',
+    price: 10.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 35,
+    minStock: 8,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-008',
+    name: 'Carry Porc',
+    price: 10.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 35,
+    minStock: 8,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-009',
+    name: 'Rougail Saucisse',
+    price: 9.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 40,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-010',
+    name: 'Cabri Massalé',
+    price: 12.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 25,
+    minStock: 5,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-011',
+    name: 'Supplément Carry',
+    price: 2.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 100,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-012',
+    name: 'Sur Place',
+    price: 2.50,
+    category: 'autres',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 999,
+    minStock: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'rep-013',
+    name: 'Barquette FREE',
+    price: 7.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 25,
+    minStock: 5,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // SANDWICHS - TVA 2.1%
+  {
+    id: 'san-001',
+    name: 'Formule Sandwich',
+    price: 7.50,
+    category: 'sandwichs',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 45,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'san-002',
+    name: 'Crunchy Fish',
+    price: 7.00,
+    category: 'sandwichs',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 30,
+    minStock: 8,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'san-003',
+    name: 'Sandwich Poulet',
+    price: 6.50,
+    category: 'sandwichs',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 35,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // SALADES - TVA 2.1%
+  {
+    id: 'sal-001',
+    name: 'Salade Du Chef',
+    price: 8.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 20,
+    minStock: 5,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'sal-002',
+    name: 'Salade De La Mer',
+    price: 8.00,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 20,
+    minStock: 5,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'sal-003',
+    name: 'Salade Semaine',
+    price: 9.50,
+    category: 'repas',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 15,
+    minStock: 3,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'sal-004',
+    name: 'Vinaigrette',
+    price: 1.00,
+    category: 'autres',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 100,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // DESSERTS - TVA 2.1%
+  {
+    id: 'des-001',
+    name: 'Cookie Classique',
+    price: 2.00,
+    category: 'desserts',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 50,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'des-002',
+    name: 'Cookie Dakatine',
+    price: 2.50,
+    category: 'desserts',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 40,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'des-003',
+    name: 'Brownie',
+    price: 3.00,
+    category: 'desserts',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 35,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'des-004',
+    name: 'Gâteau Patate',
+    price: 3.50,
+    category: 'desserts',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 30,
+    minStock: 8,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'des-005',
+    name: 'Bonbon Piment',
+    price: 1.50,
+    category: 'desserts',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 60,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'des-006',
+    name: 'Tartelette',
+    price: 2.50,
+    category: 'desserts',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 25,
+    minStock: 8,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // BOISSONS SANS ALCOOL - TVA 2.1%
+  {
+    id: 'boi-001',
+    name: 'Eau 50cl',
+    price: 1.50,
+    category: 'boissons',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 100,
+    minStock: 30,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'boi-002',
+    name: 'Soda 33cl',
+    price: 2.50,
+    category: 'boissons',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 80,
+    minStock: 25,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'boi-003',
+    name: 'Jus de Fruit',
+    price: 3.00,
+    category: 'boissons',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 60,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'boi-004',
+    name: 'Café',
+    price: 1.50,
+    category: 'boissons',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 999,
+    minStock: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'boi-005',
+    name: 'Thé',
+    price: 1.50,
+    category: 'boissons',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 999,
+    minStock: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'boi-006',
+    name: 'Jus Coco',
+    price: 3.50,
+    category: 'boissons',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 40,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // BOISSONS ALCOOLISÉES - TVA 8.5% (taux normal DOM)
+  {
+    id: 'alc-001',
+    name: 'Dodo 33cl',
+    price: 3.50,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 60,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'alc-002',
+    name: 'Bourbon 33cl',
+    price: 3.50,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 50,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'alc-003',
+    name: 'Rhum Charrette 4cl',
+    price: 4.00,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 80,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'alc-004',
+    name: 'Punch Coco',
+    price: 5.00,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 40,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'alc-005',
+    name: 'Ti Punch',
+    price: 4.50,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 100,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'alc-006',
+    name: 'Vin Rouge (verre)',
+    price: 4.00,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 50,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'alc-007',
+    name: 'Vin Rosé (verre)',
+    price: 4.00,
+    category: 'boissons_alcool',
+    vatRate: 8.5,
+    isActive: true,
+    stock: 50,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // GLACES - TVA 2.1%
+  {
+    id: 'gla-001',
+    name: 'Glace 1 Boule',
+    price: 2.50,
+    category: 'glaces',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 100,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'gla-002',
+    name: 'Glace 2 Boules',
+    price: 4.00,
+    category: 'glaces',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 100,
+    minStock: 20,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'gla-003',
+    name: 'Coupe Glacée',
+    price: 6.50,
+    category: 'glaces',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 50,
+    minStock: 10,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // FORMULES - TVA 2.1%
+  {
+    id: 'for-001',
+    name: 'Formule Midi',
+    price: 12.00,
+    category: 'formules',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 999,
+    minStock: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'for-002',
+    name: 'Formule Complète',
+    price: 15.00,
+    category: 'formules',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 999,
+    minStock: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // SNACKS - TVA 2.1%
+  {
+    id: 'sna-001',
+    name: 'Chips',
+    price: 1.50,
+    category: 'snacks',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 60,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'sna-002',
+    name: 'Barre Chocolat',
+    price: 1.80,
+    category: 'snacks',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 50,
+    minStock: 12,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    id: 'sna-003',
+    name: 'Samoussa',
+    price: 2.00,
+    category: 'snacks',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 45,
+    minStock: 15,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  // AUTRES
+  {
+    id: 'tic-001',
+    name: 'Ticket Restaurant',
+    price: 0.00,
+    category: 'autres',
+    vatRate: 2.1,
+    isActive: true,
+    stock: 999,
+    minStock: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  }
+];
+
+// Fonction pour générer un ID unique
+export const generateProductId = (): string => {
+  return `prod-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
