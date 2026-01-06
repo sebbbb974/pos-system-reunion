@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { cart, cartItems } from '$lib/stores/cart';
   import { transactionsStore } from '$lib/stores/transactions';
-  import type { PaymentMethod, Transaction, Discount, PaymentDetails } from '$lib/types';
+  import type { PaymentMethod, Transaction, Discount, PaymentDetails, CartItem } from '$lib/types';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -37,19 +37,23 @@
   // Note de frais
   let transactionNote = $state('');
 
-  // Paiement partagé multi-personnes
+  // Paiement partagé multi-personnes avec articles
   interface SplitPayer {
     id: string;
     name: string;
-    amount: string;
+    items: Map<string, number>; // productId -> quantité assignée
+    manualAmount: string; // montant manuel si pas d'articles
     method: 'cash' | 'card' | 'ticket_resto';
     paid: boolean;
   }
 
   let splitPayers: SplitPayer[] = $state([
-    { id: '1', name: 'Personne 1', amount: '', method: 'card', paid: false },
-    { id: '2', name: 'Personne 2', amount: '', method: 'card', paid: false }
+    { id: '1', name: 'Personne 1', items: new Map(), manualAmount: '', method: 'card', paid: false },
+    { id: '2', name: 'Personne 2', items: new Map(), manualAmount: '', method: 'card', paid: false }
   ]);
+
+  let splitMode: 'items' | 'manual' = $state('items'); // Mode de répartition
+  let selectedPayerForItems: string = $state('1'); // Payeur sélectionné pour assigner des articles
 
   // Calculs
   const total = $derived($cart.total);
@@ -65,10 +69,40 @@
   const mixedTotal = $derived((parseFloat(mixedCash) || 0) + (parseFloat(mixedCard) || 0) + (parseFloat(mixedTicket) || 0));
   const mixedRemaining = $derived(finalTotal - mixedTotal);
 
-  // Paiement partagé calculs
-  const splitTotal = $derived(splitPayers.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0));
+  // Paiement partagé calculs - avec articles ou manuel
+  function getPayerTotal(payer: SplitPayer): number {
+    if (splitMode === 'manual') {
+      return parseFloat(payer.manualAmount) || 0;
+    }
+    // Mode articles : calculer le total des articles assignés
+    let total = 0;
+    for (const [productId, qty] of payer.items) {
+      const cartItem = $cart.items.find(i => i.product.id === productId);
+      if (cartItem) {
+        total += cartItem.product.price * qty;
+      }
+    }
+    return total;
+  }
+
+  const splitTotal = $derived(splitPayers.reduce((sum, p) => sum + getPayerTotal(p), 0));
   const splitRemaining = $derived(finalTotal - splitTotal);
   const splitAllPaid = $derived(splitPayers.every(p => p.paid) && Math.abs(splitRemaining) < 0.01);
+
+  // Pour chaque article, calculer combien sont déjà assignés
+  function getAssignedQuantity(productId: string): number {
+    let total = 0;
+    for (const payer of splitPayers) {
+      total += payer.items.get(productId) || 0;
+    }
+    return total;
+  }
+
+  function getRemainingQuantity(productId: string): number {
+    const cartItem = $cart.items.find(i => i.product.id === productId);
+    if (!cartItem) return 0;
+    return cartItem.quantity - getAssignedQuantity(productId);
+  }
 
   // Validation
   const canPayCash = $derived(cashAmount >= finalTotal);
@@ -97,7 +131,6 @@
     { value: 200, label: '200€', image: '💶' },
   ];
 
-  // Boutons rapides pour montant exact ou arrondi
   function setExactAmount() {
     cashGiven = finalTotal.toFixed(2);
   }
@@ -115,7 +148,6 @@
     cashGiven = '';
   }
 
-  // Appliquer une remise
   function applyDiscount() {
     const value = parseFloat(discountValue) || 0;
     if (value <= 0 && discountType !== 'offered') return;
@@ -134,7 +166,6 @@
     discountReason = '';
   }
 
-  // Offrir le ticket (gratuité)
   function offerTicket() {
     activeDiscount = {
       type: 'offered',
@@ -144,7 +175,6 @@
     currentView = 'main';
   }
 
-  // Ajouter un sac plastique
   function addPlasticBag() {
     const bagProduct = {
       id: 'sac-plastique-' + Date.now(),
@@ -159,12 +189,10 @@
     cartItems.addItem(bagProduct);
   }
 
-  // Ouvrir tiroir-caisse (simulation)
   function openCashDrawer() {
     alert('🗃️ Tiroir-caisse ouvert !');
   }
 
-  // Génération du numéro de ticket
   function generateReceiptNumber(): string {
     const now = new Date();
     const date = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -175,11 +203,12 @@
 
   // === Fonctions paiement partagé ===
   function addPayer() {
-    const newId = (splitPayers.length + 1).toString();
+    const newId = (Date.now()).toString();
     splitPayers = [...splitPayers, {
       id: newId,
-      name: `Personne ${newId}`,
-      amount: '',
+      name: `Personne ${splitPayers.length + 1}`,
+      items: new Map(),
+      manualAmount: '',
       method: 'card',
       paid: false
     }];
@@ -188,12 +217,40 @@
   function removePayer(id: string) {
     if (splitPayers.length > 2) {
       splitPayers = splitPayers.filter(p => p.id !== id);
+      if (selectedPayerForItems === id) {
+        selectedPayerForItems = splitPayers[0].id;
+      }
     }
   }
 
   function splitEvenly() {
-    const perPerson = (finalTotal / splitPayers.length).toFixed(2);
-    splitPayers = splitPayers.map(p => ({ ...p, amount: perPerson }));
+    if (splitMode === 'manual') {
+      const perPerson = (finalTotal / splitPayers.length).toFixed(2);
+      splitPayers = splitPayers.map(p => ({ ...p, manualAmount: perPerson }));
+    } else {
+      // En mode articles, répartir les articles équitablement
+      // Reset d'abord
+      splitPayers = splitPayers.map(p => ({ ...p, items: new Map() }));
+
+      // Répartir chaque article
+      for (const cartItem of $cart.items) {
+        const qtyPerPerson = Math.floor(cartItem.quantity / splitPayers.length);
+        let remainder = cartItem.quantity % splitPayers.length;
+
+        splitPayers = splitPayers.map((p, idx) => {
+          const newItems = new Map(p.items);
+          let qty = qtyPerPerson;
+          if (remainder > 0) {
+            qty++;
+            remainder--;
+          }
+          if (qty > 0) {
+            newItems.set(cartItem.product.id, qty);
+          }
+          return { ...p, items: newItems };
+        });
+      }
+    }
   }
 
   function markPayerPaid(id: string) {
@@ -208,9 +265,9 @@
     );
   }
 
-  function updatePayerAmount(id: string, amount: string) {
+  function updatePayerManualAmount(id: string, amount: string) {
     splitPayers = splitPayers.map(p =>
-      p.id === id ? { ...p, amount } : p
+      p.id === id ? { ...p, manualAmount: amount } : p
     );
   }
 
@@ -224,6 +281,45 @@
     splitPayers = splitPayers.map(p =>
       p.id === id ? { ...p, name } : p
     );
+  }
+
+  // Assigner un article à un payeur
+  function assignItemToPayer(productId: string, payerId: string, quantity: number) {
+    splitPayers = splitPayers.map(p => {
+      if (p.id === payerId) {
+        const newItems = new Map(p.items);
+        if (quantity > 0) {
+          newItems.set(productId, quantity);
+        } else {
+          newItems.delete(productId);
+        }
+        return { ...p, items: newItems };
+      }
+      return p;
+    });
+  }
+
+  // Ajouter 1 article au payeur sélectionné
+  function addItemToSelectedPayer(productId: string) {
+    const remaining = getRemainingQuantity(productId);
+    if (remaining <= 0) return;
+
+    const payer = splitPayers.find(p => p.id === selectedPayerForItems);
+    if (!payer) return;
+
+    const currentQty = payer.items.get(productId) || 0;
+    assignItemToPayer(productId, selectedPayerForItems, currentQty + 1);
+  }
+
+  // Retirer 1 article du payeur
+  function removeItemFromPayer(productId: string, payerId: string) {
+    const payer = splitPayers.find(p => p.id === payerId);
+    if (!payer) return;
+
+    const currentQty = payer.items.get(productId) || 0;
+    if (currentQty > 0) {
+      assignItemToPayer(productId, payerId, currentQty - 1);
+    }
   }
 
   // Traiter le paiement
@@ -242,7 +338,6 @@
       let cashGivenAmount: number | undefined;
       let changeAmount: number | undefined;
 
-      // Construire les détails selon le mode de paiement
       if (currentView === 'cash' || selectedMethod === 'cash') {
         method = 'cash';
         cashGivenAmount = cashAmount;
@@ -266,10 +361,9 @@
         };
       } else if (currentView === 'split') {
         method = 'mixed';
-        // Compiler les paiements par méthode
-        const cashTotal = splitPayers.filter(p => p.method === 'cash').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-        const cardTotal = splitPayers.filter(p => p.method === 'card').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-        const ticketTotal = splitPayers.filter(p => p.method === 'ticket_resto').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+        const cashTotal = splitPayers.filter(p => p.method === 'cash').reduce((s, p) => s + getPayerTotal(p), 0);
+        const cardTotal = splitPayers.filter(p => p.method === 'card').reduce((s, p) => s + getPayerTotal(p), 0);
+        const ticketTotal = splitPayers.filter(p => p.method === 'ticket_resto').reduce((s, p) => s + getPayerTotal(p), 0);
 
         paymentDetails = {
           cash: cashTotal > 0 ? cashTotal : undefined,
@@ -277,7 +371,7 @@
           ticketResto: ticketTotal > 0 ? ticketTotal : undefined,
           splitPayment: splitPayers.map(p => ({
             name: p.name,
-            amount: parseFloat(p.amount) || 0,
+            amount: getPayerTotal(p),
             method: p.method
           }))
         };
@@ -301,10 +395,7 @@
         note: transactionNote || undefined
       };
 
-      // Enregistrer la transaction
       transactionsStore.add(transaction);
-
-      // Vider le panier
       cartItems.clear();
 
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -322,7 +413,6 @@
     dispatch('close');
   }
 
-  // Paiement rapide par carte
   function quickCardPayment() {
     selectedMethod = 'card';
     currentView = 'main';
@@ -348,7 +438,6 @@
     <!-- Header -->
     <div class="flex items-center justify-between p-4 border-b border-pos-accent shrink-0">
       <div class="flex items-center gap-3">
-        <!-- Bouton Retour toujours visible -->
         <button
           class="flex items-center gap-2 px-4 py-2 bg-pos-accent text-pos-text rounded-lg hover:bg-pos-primary transition-colors"
           onclick={() => currentView !== 'main' ? currentView = 'main' : close()}
@@ -402,31 +491,19 @@
       {#if currentView === 'main'}
         <!-- Actions rapides -->
         <div class="grid grid-cols-4 gap-2 mb-4">
-          <button
-            class="action-btn bg-pos-info/20 text-pos-info"
-            onclick={() => currentView = 'discount'}
-          >
+          <button class="action-btn bg-pos-info/20 text-pos-info" onclick={() => currentView = 'discount'}>
             <span class="text-xl">%</span>
             <span class="text-xs">Remise</span>
           </button>
-          <button
-            class="action-btn bg-pos-warning/20 text-pos-warning"
-            onclick={offerTicket}
-          >
+          <button class="action-btn bg-pos-warning/20 text-pos-warning" onclick={offerTicket}>
             <span class="text-xl">🎁</span>
             <span class="text-xs">Offert</span>
           </button>
-          <button
-            class="action-btn bg-pos-accent text-pos-text"
-            onclick={addPlasticBag}
-          >
+          <button class="action-btn bg-pos-accent text-pos-text" onclick={addPlasticBag}>
             <span class="text-xl">🛍️</span>
             <span class="text-xs">Sac 0,10€</span>
           </button>
-          <button
-            class="action-btn bg-pos-accent text-pos-text"
-            onclick={openCashDrawer}
-          >
+          <button class="action-btn bg-pos-accent text-pos-text" onclick={openCashDrawer}>
             <span class="text-xl">🗃️</span>
             <span class="text-xs">Tiroir</span>
           </button>
@@ -435,50 +512,35 @@
         <!-- Méthodes de paiement -->
         <p class="text-gray-400 text-sm mb-2">Mode de paiement</p>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <button
-            class="payment-btn"
-            onclick={quickCardPayment}
-          >
+          <button class="payment-btn" onclick={quickCardPayment}>
             <span class="text-4xl">💳</span>
             <span class="font-medium">Carte</span>
             <span class="text-xs text-gray-400">Paiement rapide</span>
           </button>
-          <button
-            class="payment-btn"
-            onclick={() => { selectedMethod = 'cash'; currentView = 'cash'; }}
-          >
+          <button class="payment-btn" onclick={() => { selectedMethod = 'cash'; currentView = 'cash'; }}>
             <span class="text-4xl">💵</span>
             <span class="font-medium">Espèces</span>
             <span class="text-xs text-gray-400">Avec rendu monnaie</span>
           </button>
-          <button
-            class="payment-btn"
-            onclick={() => currentView = 'ticket_resto'}
-          >
+          <button class="payment-btn" onclick={() => currentView = 'ticket_resto'}>
             <span class="text-4xl">🎫</span>
             <span class="font-medium">Ticket Resto</span>
             <span class="text-xs text-gray-400">Titre restaurant</span>
           </button>
-          <button
-            class="payment-btn"
-            onclick={() => currentView = 'mixed'}
-          >
+          <button class="payment-btn" onclick={() => currentView = 'mixed'}>
             <span class="text-4xl">🔀</span>
             <span class="font-medium">Mixte</span>
             <span class="text-xs text-gray-400">Plusieurs moyens</span>
           </button>
         </div>
 
-        <!-- Paiement partagé - NOUVEAU -->
+        <!-- Paiement partagé -->
         <div class="mb-4">
-          <button
-            class="w-full payment-btn-highlight"
-            onclick={() => currentView = 'split'}
-          >
+          <button class="w-full payment-btn-highlight" onclick={() => currentView = 'split'}>
             <span class="text-3xl">👥</span>
             <div class="text-left">
               <span class="font-bold text-lg">Addition partagée</span>
-              <span class="text-sm text-gray-300 block">Plusieurs personnes paient leur part</span>
+              <span class="text-sm text-gray-300 block">Sélectionner les articles par personne</span>
             </div>
             <span class="text-2xl">→</span>
           </button>
@@ -486,17 +548,11 @@
 
         <!-- Autres options -->
         <div class="grid grid-cols-2 gap-3">
-          <button
-            class="payment-btn-small"
-            onclick={() => { selectedMethod = 'cheque'; processPayment(); }}
-          >
+          <button class="payment-btn-small" onclick={() => { selectedMethod = 'cheque'; processPayment(); }}>
             <span class="text-2xl">📝</span>
             <span>Chèque</span>
           </button>
-          <button
-            class="payment-btn-small"
-            onclick={() => currentView = 'note'}
-          >
+          <button class="payment-btn-small" onclick={() => currentView = 'note'}>
             <span class="text-2xl">📋</span>
             <span>Note de frais</span>
           </button>
@@ -506,8 +562,6 @@
       {:else if currentView === 'cash'}
         <div class="bg-pos-dark rounded-xl p-4">
           <p class="text-gray-400 mb-3">Montant reçu</p>
-
-          <!-- Input -->
           <div class="flex items-center gap-3 mb-4">
             <input
               type="number"
@@ -520,37 +574,23 @@
             <span class="text-3xl text-pos-text">€</span>
           </div>
 
-          <!-- Boutons billets -->
           <p class="text-gray-400 text-sm mb-2">Billets</p>
           <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
             {#each billButtons as bill}
-              <button
-                class="bill-btn"
-                onclick={() => addBill(bill.value)}
-              >
+              <button class="bill-btn" onclick={() => addBill(bill.value)}>
                 <span class="text-lg">{bill.image}</span>
                 <span class="font-bold">{bill.label}</span>
               </button>
             {/each}
           </div>
 
-          <!-- Actions rapides -->
           <div class="grid grid-cols-4 gap-2 mb-4">
-            <button class="quick-btn" onclick={setExactAmount}>
-              Exact
-            </button>
-            <button class="quick-btn" onclick={() => roundUp(5)}>
-              Arrondi 5€
-            </button>
-            <button class="quick-btn" onclick={() => roundUp(10)}>
-              Arrondi 10€
-            </button>
-            <button class="quick-btn bg-pos-danger/30 text-pos-danger" onclick={clearCash}>
-              Effacer
-            </button>
+            <button class="quick-btn" onclick={setExactAmount}>Exact</button>
+            <button class="quick-btn" onclick={() => roundUp(5)}>Arrondi 5€</button>
+            <button class="quick-btn" onclick={() => roundUp(10)}>Arrondi 10€</button>
+            <button class="quick-btn bg-pos-danger/30 text-pos-danger" onclick={clearCash}>Effacer</button>
           </div>
 
-          <!-- Rendu monnaie -->
           {#if cashAmount > 0}
             <div class="p-4 bg-pos-accent rounded-xl text-center">
               <p class="text-gray-400 text-sm">Rendu monnaie</p>
@@ -558,44 +598,32 @@
                 {formatPrice(Math.max(0, change))}
               </p>
               {#if change < 0}
-                <p class="text-pos-danger text-sm mt-1">
-                  Montant insuffisant ({formatPrice(Math.abs(change))} manquant)
-                </p>
+                <p class="text-pos-danger text-sm mt-1">Montant insuffisant ({formatPrice(Math.abs(change))} manquant)</p>
               {/if}
             </div>
           {/if}
         </div>
 
-        <!-- Bouton validation espèces -->
         <button
           class="w-full mt-4 py-4 rounded-xl font-bold text-xl transition-all
-                 {canPayCash && !isProcessing
-                   ? 'bg-pos-success text-pos-dark hover:bg-green-400'
-                   : 'bg-gray-600 text-gray-400 cursor-not-allowed'}"
+                 {canPayCash && !isProcessing ? 'bg-pos-success text-pos-dark hover:bg-green-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}"
           disabled={!canPayCash || isProcessing}
           onclick={processPayment}
         >
-          {#if isProcessing}
-            ⏳ Traitement...
-          {:else}
-            ✓ VALIDER ({formatPrice(finalTotal)})
-          {/if}
+          {isProcessing ? '⏳ Traitement...' : `✓ VALIDER (${formatPrice(finalTotal)})`}
         </button>
 
       <!-- Vue Ticket Resto -->
       {:else if currentView === 'ticket_resto'}
         <div class="bg-pos-dark rounded-xl p-4">
           <p class="text-gray-400 mb-3">Titres Restaurant</p>
-
-          <!-- Valeur du ticket -->
           <div class="grid grid-cols-2 gap-4 mb-4">
             <div>
               <p class="block text-sm text-gray-400 mb-1">Valeur du ticket</p>
               <div class="flex gap-2">
                 {#each [7, 8, 9, 10, 11, 13] as value}
                   <button
-                    class="flex-1 py-2 rounded-lg font-bold transition-colors
-                           {ticketRestoValue === value ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
+                    class="flex-1 py-2 rounded-lg font-bold transition-colors {ticketRestoValue === value ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
                     onclick={() => ticketRestoValue = value}
                   >
                     {value}€
@@ -606,24 +634,12 @@
             <div>
               <p class="block text-sm text-gray-400 mb-1">Nombre de tickets</p>
               <div class="flex items-center gap-2">
-                <button
-                  class="w-12 h-12 bg-pos-accent rounded-lg text-2xl font-bold"
-                  onclick={() => ticketRestoCount = Math.max(1, ticketRestoCount - 1)}
-                >
-                  -
-                </button>
+                <button class="w-12 h-12 bg-pos-accent rounded-lg text-2xl font-bold" onclick={() => ticketRestoCount = Math.max(1, ticketRestoCount - 1)}>-</button>
                 <span class="flex-1 text-center text-3xl font-bold text-pos-text">{ticketRestoCount}</span>
-                <button
-                  class="w-12 h-12 bg-pos-accent rounded-lg text-2xl font-bold"
-                  onclick={() => ticketRestoCount++}
-                >
-                  +
-                </button>
+                <button class="w-12 h-12 bg-pos-accent rounded-lg text-2xl font-bold" onclick={() => ticketRestoCount++}>+</button>
               </div>
             </div>
           </div>
-
-          <!-- Résumé -->
           <div class="bg-pos-accent rounded-xl p-4 space-y-2">
             <div class="flex justify-between">
               <span class="text-gray-400">Total tickets</span>
@@ -635,87 +651,49 @@
             </div>
             {#if ticketRestoRemaining > 0}
               <div class="flex justify-between border-t border-pos-dark pt-2">
-                <span class="text-pos-warning">Reste à payer (espèces/CB)</span>
+                <span class="text-pos-warning">Reste à payer</span>
                 <span class="font-bold text-pos-warning">{formatPrice(ticketRestoRemaining)}</span>
-              </div>
-            {:else if ticketRestoRemaining < 0}
-              <div class="flex justify-between border-t border-pos-dark pt-2">
-                <span class="text-pos-info">Pas de rendu sur ticket resto</span>
-                <span class="font-bold text-pos-info">-{formatPrice(Math.abs(ticketRestoRemaining))}</span>
               </div>
             {/if}
           </div>
         </div>
-
         <button
-          class="w-full mt-4 py-4 rounded-xl font-bold text-xl transition-all bg-pos-success text-pos-dark hover:bg-green-400"
+          class="w-full mt-4 py-4 rounded-xl font-bold text-xl bg-pos-success text-pos-dark hover:bg-green-400"
           disabled={isProcessing}
           onclick={processPayment}
         >
-          {#if isProcessing}
-            ⏳ Traitement...
-          {:else}
-            ✓ VALIDER TICKET RESTO
-          {/if}
+          {isProcessing ? '⏳ Traitement...' : '✓ VALIDER TICKET RESTO'}
         </button>
 
       <!-- Vue Paiement Mixte -->
       {:else if currentView === 'mixed'}
         <div class="bg-pos-dark rounded-xl p-4">
-          <p class="text-gray-400 mb-3">Paiement partagé (plusieurs moyens)</p>
-
+          <p class="text-gray-400 mb-3">Paiement plusieurs moyens</p>
           <div class="space-y-3">
             <div class="flex items-center gap-3">
               <span class="w-24 text-gray-400">💵 Espèces</span>
-              <input
-                type="number"
-                bind:value={mixedCash}
-                placeholder="0,00"
-                class="flex-1 bg-pos-accent text-pos-text text-xl font-bold p-3 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary"
-                step="0.01"
-                min="0"
-              />
+              <input type="number" bind:value={mixedCash} placeholder="0,00" class="flex-1 bg-pos-accent text-pos-text text-xl font-bold p-3 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary" step="0.01" min="0" />
               <span class="text-pos-text">€</span>
             </div>
             <div class="flex items-center gap-3">
               <span class="w-24 text-gray-400">💳 Carte</span>
-              <input
-                type="number"
-                bind:value={mixedCard}
-                placeholder="0,00"
-                class="flex-1 bg-pos-accent text-pos-text text-xl font-bold p-3 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary"
-                step="0.01"
-                min="0"
-              />
+              <input type="number" bind:value={mixedCard} placeholder="0,00" class="flex-1 bg-pos-accent text-pos-text text-xl font-bold p-3 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary" step="0.01" min="0" />
               <span class="text-pos-text">€</span>
             </div>
             <div class="flex items-center gap-3">
               <span class="w-24 text-gray-400">🎫 Ticket R.</span>
-              <input
-                type="number"
-                bind:value={mixedTicket}
-                placeholder="0,00"
-                class="flex-1 bg-pos-accent text-pos-text text-xl font-bold p-3 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary"
-                step="0.01"
-                min="0"
-              />
+              <input type="number" bind:value={mixedTicket} placeholder="0,00" class="flex-1 bg-pos-accent text-pos-text text-xl font-bold p-3 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary" step="0.01" min="0" />
               <span class="text-pos-text">€</span>
             </div>
           </div>
-
-          <!-- Résumé -->
           <div class="bg-pos-accent rounded-xl p-4 mt-4 space-y-2">
             <div class="flex justify-between">
               <span class="text-gray-400">Total saisi</span>
               <span class="font-bold text-pos-text">{formatPrice(mixedTotal)}</span>
             </div>
-            <div class="flex justify-between">
-              <span class="text-gray-400">À payer</span>
-              <span class="font-bold text-pos-text">{formatPrice(finalTotal)}</span>
-            </div>
             <div class="flex justify-between border-t border-pos-dark pt-2">
               <span class="{Math.abs(mixedRemaining) < 0.01 ? 'text-pos-success' : 'text-pos-danger'}">
-                {mixedRemaining > 0.01 ? 'Reste à saisir' : mixedRemaining < -0.01 ? 'Trop perçu' : 'Compte exact'}
+                {mixedRemaining > 0.01 ? 'Reste' : 'OK'}
               </span>
               <span class="font-bold {Math.abs(mixedRemaining) < 0.01 ? 'text-pos-success' : 'text-pos-danger'}">
                 {formatPrice(Math.abs(mixedRemaining))}
@@ -723,130 +701,196 @@
             </div>
           </div>
         </div>
-
         <button
-          class="w-full mt-4 py-4 rounded-xl font-bold text-xl transition-all
-                 {canPayMixed && !isProcessing
-                   ? 'bg-pos-success text-pos-dark hover:bg-green-400'
-                   : 'bg-gray-600 text-gray-400 cursor-not-allowed'}"
+          class="w-full mt-4 py-4 rounded-xl font-bold text-xl transition-all {canPayMixed && !isProcessing ? 'bg-pos-success text-pos-dark hover:bg-green-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}"
           disabled={!canPayMixed || isProcessing}
           onclick={processPayment}
         >
-          {#if isProcessing}
-            ⏳ Traitement...
-          {:else}
-            ✓ VALIDER PAIEMENT MIXTE
-          {/if}
+          {isProcessing ? '⏳ Traitement...' : '✓ VALIDER PAIEMENT MIXTE'}
         </button>
 
-      <!-- Vue Paiement Partagé Multi-Personnes - NOUVEAU -->
+      <!-- Vue Paiement Partagé avec sélection d'articles -->
       {:else if currentView === 'split'}
         <div class="bg-pos-dark rounded-xl p-4">
+          <!-- Toggle mode -->
           <div class="flex items-center justify-between mb-4">
-            <p class="text-gray-400">👥 Addition partagée</p>
             <div class="flex gap-2">
               <button
-                class="px-3 py-1.5 bg-pos-info/20 text-pos-info rounded-lg text-sm font-medium hover:bg-pos-info/30 transition-colors"
-                onclick={splitEvenly}
+                class="px-4 py-2 rounded-lg font-medium transition-colors {splitMode === 'items' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
+                onclick={() => splitMode = 'items'}
               >
-                ÷ Diviser également
+                🍽️ Par articles
               </button>
               <button
-                class="px-3 py-1.5 bg-pos-primary/20 text-pos-primary rounded-lg text-sm font-medium hover:bg-pos-primary/30 transition-colors"
+                class="px-4 py-2 rounded-lg font-medium transition-colors {splitMode === 'manual' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
+                onclick={() => splitMode = 'manual'}
+              >
+                💰 Montants
+              </button>
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="px-3 py-1.5 bg-pos-info/20 text-pos-info rounded-lg text-sm font-medium hover:bg-pos-info/30"
+                onclick={splitEvenly}
+              >
+                ÷ Diviser
+              </button>
+              <button
+                class="px-3 py-1.5 bg-pos-primary/20 text-pos-primary rounded-lg text-sm font-medium hover:bg-pos-primary/30"
                 onclick={addPayer}
               >
-                + Ajouter
+                + Personne
               </button>
             </div>
           </div>
 
-          <!-- Liste des payeurs -->
-          <div class="space-y-3 max-h-64 overflow-y-auto">
-            {#each splitPayers as payer, index (payer.id)}
-              <div class="split-payer-card {payer.paid ? 'paid' : ''}">
-                <div class="flex items-center gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={payer.name}
-                    oninput={(e) => updatePayerName(payer.id, (e.target as HTMLInputElement).value)}
-                    class="flex-1 bg-transparent text-pos-text font-medium outline-none border-b border-transparent focus:border-pos-primary"
-                    placeholder="Nom"
-                  />
-                  {#if splitPayers.length > 2}
-                    <button
-                      class="w-6 h-6 text-pos-danger hover:bg-pos-danger/20 rounded transition-colors text-sm"
-                      onclick={() => removePayer(payer.id)}
-                    >
-                      ✕
-                    </button>
-                  {/if}
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <!-- Montant -->
-                  <div class="flex-1 flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={payer.amount}
-                      oninput={(e) => updatePayerAmount(payer.id, (e.target as HTMLInputElement).value)}
-                      placeholder="0,00"
-                      class="w-full bg-pos-accent text-pos-text text-lg font-bold p-2 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary"
-                      step="0.01"
-                      min="0"
-                      disabled={payer.paid}
-                    />
-                    <span class="text-gray-400">€</span>
-                  </div>
-
-                  <!-- Méthode de paiement -->
-                  <div class="flex gap-1">
-                    <button
-                      class="split-method-btn {payer.method === 'card' ? 'active' : ''}"
-                      onclick={() => updatePayerMethod(payer.id, 'card')}
-                      disabled={payer.paid}
-                      title="Carte"
-                    >
-                      💳
-                    </button>
-                    <button
-                      class="split-method-btn {payer.method === 'cash' ? 'active' : ''}"
-                      onclick={() => updatePayerMethod(payer.id, 'cash')}
-                      disabled={payer.paid}
-                      title="Espèces"
-                    >
-                      💵
-                    </button>
-                    <button
-                      class="split-method-btn {payer.method === 'ticket_resto' ? 'active' : ''}"
-                      onclick={() => updatePayerMethod(payer.id, 'ticket_resto')}
-                      disabled={payer.paid}
-                      title="Ticket Resto"
-                    >
-                      🎫
-                    </button>
-                  </div>
-
-                  <!-- Bouton payé -->
-                  {#if payer.paid}
-                    <button
-                      class="split-paid-btn paid"
-                      onclick={() => markPayerUnpaid(payer.id)}
-                    >
-                      ✓ Payé
-                    </button>
-                  {:else}
-                    <button
-                      class="split-paid-btn"
-                      onclick={() => markPayerPaid(payer.id)}
-                      disabled={!payer.amount || parseFloat(payer.amount) <= 0}
-                    >
-                      Encaisser
-                    </button>
-                  {/if}
+          {#if splitMode === 'items'}
+            <!-- Mode sélection par articles -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <!-- Colonne gauche : Articles à répartir -->
+              <div class="bg-pos-accent/50 rounded-xl p-3">
+                <p class="text-sm text-gray-400 mb-2">📋 Articles à répartir</p>
+                <div class="space-y-2 max-h-48 overflow-y-auto">
+                  {#each $cart.items as item (item.product.id)}
+                    {@const remaining = getRemainingQuantity(item.product.id)}
+                    <div class="flex items-center gap-2 p-2 bg-pos-dark rounded-lg">
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-pos-text truncate">{item.product.name}</p>
+                        <p class="text-xs text-gray-400">{formatPrice(item.product.price)}</p>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs px-2 py-1 rounded {remaining > 0 ? 'bg-pos-warning/20 text-pos-warning' : 'bg-pos-success/20 text-pos-success'}">
+                          {remaining > 0 ? `${remaining} restant` : '✓'}
+                        </span>
+                        <button
+                          class="w-8 h-8 bg-pos-primary rounded-lg text-white font-bold disabled:opacity-30"
+                          onclick={() => addItemToSelectedPayer(item.product.id)}
+                          disabled={remaining <= 0}
+                          title="Ajouter à {splitPayers.find(p => p.id === selectedPayerForItems)?.name}"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  {/each}
                 </div>
               </div>
-            {/each}
-          </div>
+
+              <!-- Colonne droite : Personnes -->
+              <div class="space-y-2 max-h-64 overflow-y-auto">
+                {#each splitPayers as payer (payer.id)}
+                  {@const payerTotal = getPayerTotal(payer)}
+                  <div
+                    class="split-payer-card {payer.paid ? 'paid' : ''} {selectedPayerForItems === payer.id ? 'selected' : ''}"
+                    onclick={() => selectedPayerForItems = payer.id}
+                    role="button"
+                    tabindex="0"
+                    onkeydown={(e) => e.key === 'Enter' && (selectedPayerForItems = payer.id)}
+                  >
+                    <div class="flex items-center justify-between mb-2">
+                      <input
+                        type="text"
+                        value={payer.name}
+                        oninput={(e) => updatePayerName(payer.id, (e.target as HTMLInputElement).value)}
+                        class="bg-transparent text-pos-text font-medium outline-none border-b border-transparent focus:border-pos-primary flex-1 mr-2"
+                        onclick={(e) => e.stopPropagation()}
+                      />
+                      {#if splitPayers.length > 2}
+                        <button
+                          class="w-6 h-6 text-pos-danger hover:bg-pos-danger/20 rounded text-sm"
+                          onclick={(e) => { e.stopPropagation(); removePayer(payer.id); }}
+                        >
+                          ✕
+                        </button>
+                      {/if}
+                    </div>
+
+                    <!-- Articles assignés -->
+                    {#if payer.items.size > 0}
+                      <div class="flex flex-wrap gap-1 mb-2">
+                        {#each Array.from(payer.items.entries()) as [productId, qty]}
+                          {@const cartItem = $cart.items.find(i => i.product.id === productId)}
+                          {#if cartItem}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-pos-primary/20 text-pos-primary rounded text-xs">
+                              {qty}× {cartItem.product.name.substring(0, 12)}{cartItem.product.name.length > 12 ? '...' : ''}
+                              <button
+                                class="hover:text-pos-danger"
+                                onclick={(e) => { e.stopPropagation(); removeItemFromPayer(productId, payer.id); }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          {/if}
+                        {/each}
+                      </div>
+                    {:else}
+                      <p class="text-xs text-gray-500 mb-2 italic">Cliquez + sur un article</p>
+                    {/if}
+
+                    <div class="flex items-center gap-2">
+                      <span class="text-lg font-bold text-pos-text flex-1">{formatPrice(payerTotal)}</span>
+                      <div class="flex gap-1">
+                        <button class="split-method-btn {payer.method === 'card' ? 'active' : ''}" onclick={(e) => { e.stopPropagation(); updatePayerMethod(payer.id, 'card'); }} disabled={payer.paid}>💳</button>
+                        <button class="split-method-btn {payer.method === 'cash' ? 'active' : ''}" onclick={(e) => { e.stopPropagation(); updatePayerMethod(payer.id, 'cash'); }} disabled={payer.paid}>💵</button>
+                        <button class="split-method-btn {payer.method === 'ticket_resto' ? 'active' : ''}" onclick={(e) => { e.stopPropagation(); updatePayerMethod(payer.id, 'ticket_resto'); }} disabled={payer.paid}>🎫</button>
+                      </div>
+                      {#if payer.paid}
+                        <button class="split-paid-btn paid" onclick={(e) => { e.stopPropagation(); markPayerUnpaid(payer.id); }}>✓</button>
+                      {:else}
+                        <button class="split-paid-btn" onclick={(e) => { e.stopPropagation(); markPayerPaid(payer.id); }} disabled={payerTotal <= 0}>OK</button>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+          {:else}
+            <!-- Mode montants manuels -->
+            <div class="space-y-3 max-h-64 overflow-y-auto">
+              {#each splitPayers as payer (payer.id)}
+                {@const payerTotal = getPayerTotal(payer)}
+                <div class="split-payer-card {payer.paid ? 'paid' : ''}">
+                  <div class="flex items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={payer.name}
+                      oninput={(e) => updatePayerName(payer.id, (e.target as HTMLInputElement).value)}
+                      class="flex-1 bg-transparent text-pos-text font-medium outline-none border-b border-transparent focus:border-pos-primary"
+                    />
+                    {#if splitPayers.length > 2}
+                      <button class="w-6 h-6 text-pos-danger hover:bg-pos-danger/20 rounded text-sm" onclick={() => removePayer(payer.id)}>✕</button>
+                    {/if}
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={payer.manualAmount}
+                        oninput={(e) => updatePayerManualAmount(payer.id, (e.target as HTMLInputElement).value)}
+                        placeholder="0,00"
+                        class="w-full bg-pos-accent text-pos-text text-lg font-bold p-2 rounded-lg text-right outline-none focus:ring-2 focus:ring-pos-primary"
+                        step="0.01"
+                        min="0"
+                        disabled={payer.paid}
+                      />
+                      <span class="text-gray-400">€</span>
+                    </div>
+                    <div class="flex gap-1">
+                      <button class="split-method-btn {payer.method === 'card' ? 'active' : ''}" onclick={() => updatePayerMethod(payer.id, 'card')} disabled={payer.paid}>💳</button>
+                      <button class="split-method-btn {payer.method === 'cash' ? 'active' : ''}" onclick={() => updatePayerMethod(payer.id, 'cash')} disabled={payer.paid}>💵</button>
+                      <button class="split-method-btn {payer.method === 'ticket_resto' ? 'active' : ''}" onclick={() => updatePayerMethod(payer.id, 'ticket_resto')} disabled={payer.paid}>🎫</button>
+                    </div>
+                    {#if payer.paid}
+                      <button class="split-paid-btn paid" onclick={() => markPayerUnpaid(payer.id)}>✓ Payé</button>
+                    {:else}
+                      <button class="split-paid-btn" onclick={() => markPayerPaid(payer.id)} disabled={payerTotal <= 0}>Encaisser</button>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
 
           <!-- Résumé -->
           <div class="bg-pos-accent rounded-xl p-4 mt-4 space-y-2">
@@ -855,31 +899,22 @@
               <span class="font-bold text-pos-text">{formatPrice(finalTotal)}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">Total saisi ({splitPayers.length} pers.)</span>
+              <span class="text-gray-400">Réparti ({splitPayers.length} pers.)</span>
               <span class="font-bold text-pos-text">{formatPrice(splitTotal)}</span>
             </div>
             <div class="flex justify-between border-t border-pos-dark pt-2">
               <span class="{Math.abs(splitRemaining) < 0.01 ? 'text-pos-success' : 'text-pos-warning'}">
-                {splitRemaining > 0.01 ? 'Reste à répartir' : splitRemaining < -0.01 ? 'Trop réparti' : 'Total exact'}
+                {splitRemaining > 0.01 ? 'Reste' : splitRemaining < -0.01 ? 'Trop' : '✓ OK'}
               </span>
               <span class="font-bold {Math.abs(splitRemaining) < 0.01 ? 'text-pos-success' : 'text-pos-warning'}">
                 {formatPrice(Math.abs(splitRemaining))}
-              </span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-400">Payé</span>
-              <span class="font-bold text-pos-success">
-                {formatPrice(splitPayers.filter(p => p.paid).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0))}
               </span>
             </div>
           </div>
         </div>
 
         <button
-          class="w-full mt-4 py-4 rounded-xl font-bold text-xl transition-all
-                 {splitAllPaid && !isProcessing
-                   ? 'bg-pos-success text-pos-dark hover:bg-green-400'
-                   : 'bg-gray-600 text-gray-400 cursor-not-allowed'}"
+          class="w-full mt-4 py-4 rounded-xl font-bold text-xl transition-all {splitAllPaid && !isProcessing ? 'bg-pos-success text-pos-dark hover:bg-green-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}"
           disabled={!splitAllPaid || isProcessing}
           onclick={processPayment}
         >
@@ -888,9 +923,9 @@
           {:else if !canPaySplit}
             Répartir le total exact
           {:else if !splitAllPaid}
-            Encaisser toutes les parts
+            Encaisser tout le monde
           {:else}
-            ✓ FINALISER L'ADDITION
+            ✓ FINALISER
           {/if}
         </button>
 
@@ -898,127 +933,42 @@
       {:else if currentView === 'discount'}
         <div class="bg-pos-dark rounded-xl p-4">
           <p class="text-gray-400 mb-3">Appliquer une remise</p>
-
-          <!-- Type de remise -->
           <div class="grid grid-cols-3 gap-2 mb-4">
-            <button
-              class="py-3 rounded-lg font-bold transition-colors
-                     {discountType === 'percent' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
-              onclick={() => discountType = 'percent'}
-            >
-              % Pourcentage
-            </button>
-            <button
-              class="py-3 rounded-lg font-bold transition-colors
-                     {discountType === 'amount' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
-              onclick={() => discountType = 'amount'}
-            >
-              € Montant
-            </button>
-            <button
-              class="py-3 rounded-lg font-bold transition-colors
-                     {discountType === 'offered' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}"
-              onclick={() => discountType = 'offered'}
-            >
-              🎁 Offert
-            </button>
+            <button class="py-3 rounded-lg font-bold transition-colors {discountType === 'percent' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}" onclick={() => discountType = 'percent'}>%</button>
+            <button class="py-3 rounded-lg font-bold transition-colors {discountType === 'amount' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}" onclick={() => discountType = 'amount'}>€</button>
+            <button class="py-3 rounded-lg font-bold transition-colors {discountType === 'offered' ? 'bg-pos-primary text-white' : 'bg-pos-accent text-pos-text'}" onclick={() => discountType = 'offered'}>🎁</button>
           </div>
-
           {#if discountType !== 'offered'}
             <div class="flex items-center gap-3 mb-4">
-              <input
-                type="number"
-                bind:value={discountValue}
-                placeholder={discountType === 'percent' ? '10' : '5,00'}
-                class="flex-1 bg-pos-accent text-pos-text text-3xl font-bold p-4 rounded-xl text-center outline-none focus:ring-2 focus:ring-pos-primary"
-                step={discountType === 'percent' ? '1' : '0.01'}
-                min="0"
-                max={discountType === 'percent' ? '100' : undefined}
-              />
+              <input type="number" bind:value={discountValue} placeholder={discountType === 'percent' ? '10' : '5'} class="flex-1 bg-pos-accent text-pos-text text-3xl font-bold p-4 rounded-xl text-center outline-none" step={discountType === 'percent' ? '1' : '0.01'} min="0" max={discountType === 'percent' ? '100' : undefined} />
               <span class="text-3xl text-pos-text">{discountType === 'percent' ? '%' : '€'}</span>
             </div>
-
-            <!-- Boutons rapides -->
             {#if discountType === 'percent'}
               <div class="grid grid-cols-4 gap-2 mb-4">
                 {#each [5, 10, 15, 20] as pct}
-                  <button
-                    class="quick-btn"
-                    onclick={() => discountValue = pct.toString()}
-                  >
-                    {pct}%
-                  </button>
+                  <button class="quick-btn" onclick={() => discountValue = pct.toString()}>{pct}%</button>
                 {/each}
               </div>
             {/if}
           {/if}
-
-          <!-- Raison -->
           <div class="mb-4">
-            <p class="block text-sm text-gray-400 mb-1">Raison (optionnel)</p>
-            <input
-              type="text"
-              bind:value={discountReason}
-              placeholder="Client fidèle, erreur de commande..."
-              class="w-full bg-pos-accent text-pos-text p-3 rounded-lg outline-none focus:ring-2 focus:ring-pos-primary"
-            />
+            <p class="block text-sm text-gray-400 mb-1">Raison</p>
+            <input type="text" bind:value={discountReason} placeholder="Client fidèle..." class="w-full bg-pos-accent text-pos-text p-3 rounded-lg outline-none" />
           </div>
-
-          <!-- Aperçu -->
-          {#if discountValue || discountType === 'offered'}
-            <div class="bg-pos-accent rounded-xl p-4 text-center">
-              <p class="text-gray-400 text-sm">Nouveau total</p>
-              <p class="text-3xl font-bold text-pos-success">
-                {formatPrice(calculateFinalTotal(total, {
-                  type: discountType,
-                  value: discountType === 'offered' ? 100 : parseFloat(discountValue) || 0
-                }))}
-              </p>
-            </div>
-          {/if}
         </div>
-
-        <button
-          class="w-full mt-4 py-4 rounded-xl font-bold text-xl bg-pos-primary text-white hover:bg-pos-primary/80 transition-colors"
-          onclick={applyDiscount}
-        >
-          ✓ APPLIQUER LA REMISE
-        </button>
+        <button class="w-full mt-4 py-4 rounded-xl font-bold text-xl bg-pos-primary text-white hover:bg-pos-primary/80" onclick={applyDiscount}>✓ APPLIQUER</button>
 
       <!-- Vue Note de frais -->
       {:else if currentView === 'note'}
         <div class="bg-pos-dark rounded-xl p-4">
-          <p class="text-gray-400 mb-3">Note de frais / Commentaire</p>
-
-          <textarea
-            bind:value={transactionNote}
-            placeholder="Nom du client, numéro de bon, référence..."
-            rows="4"
-            class="w-full bg-pos-accent text-pos-text p-4 rounded-lg outline-none focus:ring-2 focus:ring-pos-primary resize-none"
-          ></textarea>
-
+          <p class="text-gray-400 mb-3">Note de frais</p>
+          <textarea bind:value={transactionNote} placeholder="Référence..." rows="4" class="w-full bg-pos-accent text-pos-text p-4 rounded-lg outline-none resize-none"></textarea>
           <div class="mt-4 grid grid-cols-2 gap-2">
-            <button
-              class="py-2 bg-pos-accent rounded-lg text-sm"
-              onclick={() => transactionNote = 'Note de frais - '}
-            >
-              📋 Note de frais
-            </button>
-            <button
-              class="py-2 bg-pos-accent rounded-lg text-sm"
-              onclick={() => transactionNote = 'Repas affaires - '}
-            >
-              🍽️ Repas affaires
-            </button>
+            <button class="py-2 bg-pos-accent rounded-lg text-sm" onclick={() => transactionNote = 'Note de frais - '}>📋 Note</button>
+            <button class="py-2 bg-pos-accent rounded-lg text-sm" onclick={() => transactionNote = 'Repas affaires - '}>🍽️ Repas</button>
           </div>
         </div>
-
-        <button
-          class="w-full mt-4 py-4 rounded-xl font-bold text-xl bg-pos-primary text-white hover:bg-pos-primary/80 transition-colors"
-          onclick={() => currentView = 'main'}
-        >
-          ✓ ENREGISTRER ET CONTINUER
-        </button>
+        <button class="w-full mt-4 py-4 rounded-xl font-bold text-xl bg-pos-primary text-white hover:bg-pos-primary/80" onclick={() => currentView = 'main'}>✓ OK</button>
       {/if}
     </div>
   </div>
@@ -1037,12 +987,10 @@
     color: var(--pos-text);
     gap: 0.25rem;
   }
-
   .payment-btn:hover {
     background: var(--pos-primary);
     transform: scale(1.02);
   }
-
   .payment-btn-highlight {
     display: flex;
     align-items: center;
@@ -1055,13 +1003,10 @@
     color: var(--pos-text);
     gap: 1rem;
   }
-
   .payment-btn-highlight:hover {
     background: linear-gradient(135deg, rgba(255, 107, 107, 0.25) 0%, rgba(78, 205, 196, 0.25) 100%);
     border-color: rgba(255, 107, 107, 0.5);
-    transform: scale(1.01);
   }
-
   .payment-btn-small {
     display: flex;
     align-items: center;
@@ -1073,11 +1018,9 @@
     transition: all 0.15s ease;
     color: var(--pos-text);
   }
-
   .payment-btn-small:hover {
     background: var(--pos-dark);
   }
-
   .action-btn {
     display: flex;
     flex-direction: column;
@@ -1088,12 +1031,10 @@
     transition: all 0.15s ease;
     gap: 0.25rem;
   }
-
   .action-btn:hover {
     opacity: 0.8;
     transform: scale(1.02);
   }
-
   .bill-btn {
     display: flex;
     flex-direction: column;
@@ -1106,16 +1047,10 @@
     transition: all 0.1s ease;
     gap: 0.25rem;
   }
-
   .bill-btn:hover {
     transform: scale(1.05);
     box-shadow: 0 4px 12px rgba(133, 187, 101, 0.3);
   }
-
-  .bill-btn:active {
-    transform: scale(0.95);
-  }
-
   .quick-btn {
     padding: 0.75rem;
     background: var(--pos-accent);
@@ -1124,83 +1059,73 @@
     border-radius: 0.5rem;
     transition: all 0.1s ease;
   }
-
   .quick-btn:hover {
     background: var(--pos-primary);
-  }
-
-  .quick-btn:active {
-    transform: scale(0.95);
   }
 
   /* Split Payment Styles */
   .split-payer-card {
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 0.75rem;
     transition: all 0.2s ease;
+    cursor: pointer;
   }
-
+  .split-payer-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  .split-payer-card.selected {
+    border-color: var(--pos-primary);
+    background: rgba(255, 107, 107, 0.1);
+  }
   .split-payer-card.paid {
     background: rgba(46, 204, 113, 0.1);
     border-color: rgba(46, 204, 113, 0.3);
   }
-
   .split-method-btn {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    font-size: 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
     transition: all 0.15s ease;
   }
-
   .split-method-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
   }
-
   .split-method-btn.active {
     background: var(--pos-primary);
     border-color: var(--pos-primary);
   }
-
   .split-method-btn:disabled {
     opacity: 0.5;
-    cursor: not-allowed;
   }
-
   .split-paid-btn {
-    padding: 0.5rem 0.75rem;
+    padding: 0.4rem 0.6rem;
     background: var(--pos-accent);
     color: var(--pos-text);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    border-radius: 8px;
+    border-radius: 6px;
     transition: all 0.15s ease;
-    white-space: nowrap;
   }
-
   .split-paid-btn:hover:not(:disabled) {
     background: var(--pos-success);
     color: var(--pos-dark);
   }
-
   .split-paid-btn:disabled {
     opacity: 0.5;
-    cursor: not-allowed;
   }
-
   .split-paid-btn.paid {
     background: var(--pos-success);
     color: var(--pos-dark);
   }
 
-  /* Cacher les flèches du input number */
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -1208,5 +1133,6 @@
   }
   input[type="number"] {
     -moz-appearance: textfield;
+    appearance: textfield;
   }
 </style>
