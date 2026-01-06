@@ -260,20 +260,21 @@
   >
     <!-- Header -->
     <div class="flex items-center justify-between p-4 border-b border-pos-accent shrink-0">
-      <div class="flex items-center gap-4">
-        <h2 class="text-2xl font-bold text-pos-text">💳 Encaissement</h2>
-        {#if currentView !== 'main'}
-          <button
-            class="px-3 py-1 bg-pos-accent text-pos-text rounded-lg text-sm hover:bg-pos-primary transition-colors"
-            on:click={() => currentView = 'main'}
-          >
-            ← Retour
-          </button>
-        {/if}
+      <div class="flex items-center gap-3">
+        <!-- Bouton Retour toujours visible -->
+        <button
+          class="flex items-center gap-2 px-4 py-2 bg-pos-accent text-pos-text rounded-lg hover:bg-pos-primary transition-colors"
+          on:click={() => currentView !== 'main' ? currentView = 'main' : close()}
+        >
+          <span class="text-lg">←</span>
+          <span class="font-medium">Retour</span>
+        </button>
+        <h2 class="text-xl font-bold text-pos-text">💳 Encaissement</h2>
       </div>
       <button
-        class="w-10 h-10 rounded-full bg-pos-accent text-pos-text flex items-center justify-center text-2xl hover:bg-pos-primary transition-colors"
+        class="w-10 h-10 rounded-full bg-pos-accent text-pos-text flex items-center justify-center text-2xl hover:bg-pos-danger transition-colors"
         on:click={close}
+        title="Fermer"
       >
         ×
       </button>
