@@ -64,3 +64,7 @@ export const getCategoryById = (id: CategoryType): Category | undefined => {
 export const getCategoryColor = (id: CategoryType): string => {
   return getCategoryById(id)?.color || '#6b7280';
 };
+
+export const getCategoryIcon = (id: CategoryType): string => {
+  return getCategoryById(id)?.icon || '📋';
+};
