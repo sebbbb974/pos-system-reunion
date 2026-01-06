@@ -102,6 +102,15 @@ export interface PaymentDetails {
   cheque?: number;
   ticketResto?: number;
   ticketRestoCount?: number;
+  // Paiement partagé multi-personnes
+  splitPayment?: SplitPayerInfo[];
+}
+
+// Info sur un payeur dans un paiement partagé
+export interface SplitPayerInfo {
+  name: string;
+  amount: number;
+  method: 'cash' | 'card' | 'ticket_resto';
 }
 
 // Types de remise

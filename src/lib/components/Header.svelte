@@ -3,9 +3,10 @@
   import { page } from '$app/stores';
   import { authStore, currentPermissions } from '$lib/stores/auth';
 
-  let currentTime = '';
-  let currentDate = '';
-  let showUserMenu = false;
+  let currentTime = $state('');
+  let currentDate = $state('');
+  let showUserMenu = $state(false);
+  let showMobileMenu = $state(false);
 
   function updateDateTime() {
     const now = new Date();
@@ -58,23 +59,23 @@
     return () => clearInterval(interval);
   });
 
-  $: currentPath = $page.url.pathname;
-  $: user = $authStore;
-  $: permissions = $currentPermissions;
+  const currentPath = $derived($page.url.pathname);
+  const user = $derived($authStore);
+  const permissions = $derived($currentPermissions);
 
   // Navigation items filtrés selon les permissions
-  $: navItems = [
+  const navItems = $derived([
     { href: '/', icon: '🏠', label: 'Caisse', show: true },
     { href: '/dashboard', icon: '📊', label: 'Stats', show: permissions?.canAccessDashboard },
     { href: '/products', icon: '🍽️', label: 'Menu', show: permissions?.canAccessProducts },
     { href: '/employees', icon: '👥', label: 'Équipe', show: permissions?.canAccessEmployees },
     { href: '/live', icon: '📡', label: 'Live', show: permissions?.canViewRemotely },
     { href: '/settings', icon: '⚙️', label: 'Config', show: permissions?.canAccessSettings }
-  ].filter(item => item.show);
+  ].filter(item => item.show));
 </script>
 
 <header class="header-glass">
-  <div class="flex items-center gap-6">
+  <div class="header-left">
     <!-- Logo Premium -->
     <a href="/" class="logo-container">
       <div class="logo-icon">
@@ -87,11 +88,11 @@
       </div>
     </a>
 
-    <!-- Séparateur -->
-    <div class="h-8 w-px bg-white/10"></div>
+    <!-- Séparateur (desktop only) -->
+    <div class="separator desktop-only"></div>
 
-    <!-- Navigation -->
-    <nav class="nav-container">
+    <!-- Navigation Desktop -->
+    <nav class="nav-container desktop-only">
       {#each navItems as item}
         <a
           href={item.href}
@@ -108,32 +109,37 @@
     </nav>
   </div>
 
-  <!-- Droite: Date/Heure + User -->
-  <div class="flex items-center gap-4">
-    <!-- Date/Heure stylisée -->
-    <div class="time-display">
+  <!-- Droite: Date/Heure + User + Menu Mobile -->
+  <div class="header-right">
+    <!-- Date/Heure stylisée (desktop only) -->
+    <div class="time-display desktop-only">
       <span class="time-value">{currentTime}</span>
       <span class="time-date">{currentDate}</span>
     </div>
 
-    <!-- Séparateur -->
-    <div class="h-8 w-px bg-white/10"></div>
+    <!-- Séparateur desktop -->
+    <div class="separator desktop-only"></div>
+
+    <!-- Bouton menu mobile -->
+    <button class="mobile-menu-btn mobile-only" onclick={() => showMobileMenu = !showMobileMenu}>
+      <span class="menu-icon">{showMobileMenu ? '✕' : '☰'}</span>
+    </button>
 
     <!-- Utilisateur connecté -->
     {#if user}
-      <div class="relative">
+      <div class="user-container">
         <button
           class="user-button"
-          on:click={() => showUserMenu = !showUserMenu}
+          onclick={() => showUserMenu = !showUserMenu}
         >
           <div class="user-avatar" style="--role-color: {getRoleColor(user.role)}">
             <span>{getRoleIcon(user.role)}</span>
           </div>
-          <div class="user-info">
+          <div class="user-info desktop-only">
             <span class="user-name">{user.name}</span>
             <span class="user-role" style="color: {getRoleColor(user.role)}">{getRoleLabel(user.role)}</span>
           </div>
-          <svg class="chevron" class:open={showUserMenu} width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <svg class="chevron desktop-only" class:open={showUserMenu} width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" fill="none"/>
           </svg>
         </button>
@@ -154,13 +160,13 @@
             <div class="menu-divider"></div>
 
             {#if permissions?.canViewRemotely}
-              <a href="/live" class="menu-item" on:click={() => showUserMenu = false}>
+              <a href="/live" class="menu-item" onclick={() => showUserMenu = false}>
                 <span>📡</span>
                 <span>Suivi en direct</span>
               </a>
             {/if}
 
-            <button class="menu-item danger" on:click={logout}>
+            <button class="menu-item danger" onclick={logout}>
               <span>🚪</span>
               <span>Déconnexion</span>
             </button>
@@ -171,11 +177,44 @@
   </div>
 </header>
 
-<!-- Overlay pour fermer le menu -->
+<!-- Navigation Mobile Drawer -->
+{#if showMobileMenu}
+  <div class="mobile-nav-overlay" onclick={() => showMobileMenu = false}></div>
+  <nav class="mobile-nav">
+    <div class="mobile-nav-header">
+      <span class="mobile-nav-title">Menu</span>
+      <span class="mobile-nav-time">{currentTime}</span>
+    </div>
+    <div class="mobile-nav-items">
+      {#each navItems as item}
+        <a
+          href={item.href}
+          class="mobile-nav-item"
+          class:active={currentPath === item.href}
+          onclick={() => showMobileMenu = false}
+        >
+          <span class="mobile-nav-icon">{item.icon}</span>
+          <span class="mobile-nav-label">{item.label}</span>
+          {#if currentPath === item.href}
+            <span class="mobile-nav-active">●</span>
+          {/if}
+        </a>
+      {/each}
+    </div>
+    <div class="mobile-nav-footer">
+      <button class="mobile-logout-btn" onclick={logout}>
+        <span>🚪</span>
+        <span>Déconnexion</span>
+      </button>
+    </div>
+  </nav>
+{/if}
+
+<!-- Overlay pour fermer le menu utilisateur -->
 {#if showUserMenu}
   <button
     class="fixed inset-0 z-40 bg-transparent"
-    on:click={() => showUserMenu = false}
+    onclick={() => showUserMenu = false}
     aria-label="Fermer le menu"
   ></button>
 {/if}
@@ -185,10 +224,46 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1.5rem;
+    padding: 0.75rem 1rem;
     background: rgba(18, 18, 43, 0.95);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .separator {
+    height: 2rem;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Responsive helpers */
+  .desktop-only {
+    display: flex;
+  }
+
+  .mobile-only {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    .desktop-only {
+      display: none !important;
+    }
+    .mobile-only {
+      display: flex !important;
+    }
   }
 
   /* Logo */
@@ -201,18 +276,18 @@
 
   .logo-icon {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
   }
 
   .logo-emoji {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     position: relative;
     z-index: 1;
   }
@@ -221,7 +296,7 @@
     position: absolute;
     inset: -2px;
     background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
-    border-radius: 14px;
+    border-radius: 12px;
     opacity: 0.5;
     filter: blur(8px);
     z-index: 0;
@@ -233,7 +308,7 @@
   }
 
   .brand-name {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 800;
     background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
     -webkit-background-clip: text;
@@ -243,30 +318,37 @@
   }
 
   .brand-subtitle {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: rgba(255, 255, 255, 0.5);
     font-weight: 500;
     letter-spacing: 0.5px;
   }
 
-  /* Navigation */
+  /* Navigation Desktop */
   .nav-container {
     display: flex;
     gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav-container::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-item {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1rem;
-    border-radius: 10px;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     font-weight: 500;
     text-decoration: none;
     transition: all 0.2s ease;
+    white-space: nowrap;
   }
 
   .nav-item:hover {
@@ -280,7 +362,7 @@
   }
 
   .nav-icon {
-    font-size: 1.1rem;
+    font-size: 1rem;
   }
 
   .nav-indicator {
@@ -288,10 +370,10 @@
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 20px;
-    height: 3px;
+    width: 16px;
+    height: 2px;
     background: linear-gradient(90deg, #ff6b6b, #4ecdc4);
-    border-radius: 3px 3px 0 0;
+    border-radius: 2px 2px 0 0;
   }
 
   /* Time Display */
@@ -302,7 +384,7 @@
   }
 
   .time-value {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%);
@@ -313,20 +395,44 @@
   }
 
   .time-date {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: rgba(255, 255, 255, 0.5);
     text-transform: capitalize;
   }
 
+  /* Mobile Menu Button */
+  .mobile-menu-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: white;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
   /* User Button */
+  .user-container {
+    position: relative;
+  }
+
   .user-button {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+    padding: 0.4rem;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: 10px;
     cursor: pointer;
     transition: all 0.2s ease;
   }
@@ -337,13 +443,13 @@
   }
 
   .user-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
+    font-size: 1rem;
     background: color-mix(in srgb, var(--role-color) 20%, transparent);
     border: 1px solid color-mix(in srgb, var(--role-color) 30%, transparent);
   }
@@ -352,17 +458,18 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    padding-right: 0.25rem;
   }
 
   .user-name {
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: white;
     line-height: 1.2;
   }
 
   .user-role {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 500;
     line-height: 1.2;
   }
@@ -453,5 +560,132 @@
 
   .menu-item.danger:hover {
     background: rgba(231, 76, 60, 0.1);
+  }
+
+  /* Mobile Navigation */
+  .mobile-nav-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 90;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .mobile-nav {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    background: rgba(18, 18, 43, 0.98);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    animation: slideIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+
+  .mobile-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .mobile-nav-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+  }
+
+  .mobile-nav-time {
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mobile-nav-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem;
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    margin-bottom: 0.25rem;
+  }
+
+  .mobile-nav-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+  }
+
+  .mobile-nav-item.active {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.2) 0%, rgba(78, 205, 196, 0.2) 100%);
+    color: white;
+  }
+
+  .mobile-nav-icon {
+    font-size: 1.25rem;
+    width: 32px;
+    text-align: center;
+  }
+
+  .mobile-nav-label {
+    flex: 1;
+  }
+
+  .mobile-nav-active {
+    font-size: 0.5rem;
+    color: #4ecdc4;
+  }
+
+  .mobile-nav-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .mobile-logout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.875rem;
+    background: rgba(231, 76, 60, 0.15);
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    border-radius: 12px;
+    color: #e74c3c;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .mobile-logout-btn:hover {
+    background: rgba(231, 76, 60, 0.25);
   }
 </style>
