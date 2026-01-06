@@ -79,16 +79,39 @@ export interface Transaction {
   subtotal: number;
   totalVat: number;
   total: number;
+  finalTotal: number; // Après remise
+  discount?: Discount;
   paymentMethod: PaymentMethod;
+  paymentDetails?: PaymentDetails;
   cashGiven?: number;
   change?: number;
   timestamp: Date;
   employeeId?: string;
   employeeName?: string;
   receiptNumber: string;
+  isOffered?: boolean;
+  note?: string;
 }
 
-export type PaymentMethod = 'cash' | 'card' | 'cheque' | 'ticket';
+export type PaymentMethod = 'cash' | 'card' | 'cheque' | 'ticket_resto' | 'mixed';
+
+// Détails de paiement pour les paiements mixtes
+export interface PaymentDetails {
+  cash?: number;
+  card?: number;
+  cheque?: number;
+  ticketResto?: number;
+  ticketRestoCount?: number;
+}
+
+// Types de remise
+export type DiscountType = 'percent' | 'amount' | 'offered';
+
+export interface Discount {
+  type: DiscountType;
+  value: number;
+  reason?: string;
+}
 
 export interface DailySales {
   date: string;

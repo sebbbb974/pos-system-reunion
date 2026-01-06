@@ -126,6 +126,7 @@ export function processPayment(paymentMethod: PaymentMethod, cashGiven?: number)
     subtotal: currentCart.subtotal,
     totalVat: currentCart.totalVat,
     total: currentCart.total,
+    finalTotal: currentCart.total, // Sans remise par défaut
     paymentMethod,
     cashGiven: paymentMethod === 'cash' ? cashGiven : undefined,
     change: paymentMethod === 'cash' && cashGiven ? cashGiven - currentCart.total : undefined,
