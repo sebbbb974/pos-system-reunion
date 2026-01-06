@@ -750,23 +750,22 @@
               <!-- Colonne gauche : Articles à répartir -->
               <div class="bg-pos-accent/50 rounded-xl p-3">
                 <p class="text-sm text-gray-400 mb-2">📋 Articles à répartir</p>
-                <div class="space-y-2 max-h-48 overflow-y-auto">
+                <div class="space-y-2 max-h-60 overflow-y-auto">
                   {#each $cart.items as item (item.product.id)}
                     {@const remaining = getRemainingQuantity(item.product.id)}
-                    <div class="flex items-center gap-2 p-2 bg-pos-dark rounded-lg">
+                    <div class="flex items-center gap-3 p-3 bg-pos-dark rounded-xl">
                       <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium text-pos-text truncate">{item.product.name}</p>
-                        <p class="text-xs text-gray-400">{formatPrice(item.product.price)}</p>
+                        <p class="text-base font-medium text-pos-text truncate">{item.product.name}</p>
+                        <p class="text-sm text-gray-400">{formatPrice(item.product.price)}</p>
                       </div>
-                      <div class="flex items-center gap-2">
-                        <span class="text-xs px-2 py-1 rounded {remaining > 0 ? 'bg-pos-warning/20 text-pos-warning' : 'bg-pos-success/20 text-pos-success'}">
-                          {remaining > 0 ? `${remaining} restant` : '✓'}
+                      <div class="flex items-center gap-3">
+                        <span class="text-sm px-3 py-1.5 rounded-lg font-medium {remaining > 0 ? 'bg-pos-warning/20 text-pos-warning' : 'bg-pos-success/20 text-pos-success'}">
+                          {remaining > 0 ? `${remaining}` : '✓'}
                         </span>
                         <button
-                          class="w-8 h-8 bg-pos-primary rounded-lg text-white font-bold disabled:opacity-30"
+                          class="w-14 h-14 bg-pos-primary rounded-xl text-white font-bold text-2xl disabled:opacity-30 active:scale-95 transition-transform shadow-lg"
                           onclick={() => addItemToSelectedPayer(item.product.id)}
                           disabled={remaining <= 0}
-                          title="Ajouter à {splitPayers.find(p => p.id === selectedPayerForItems)?.name}"
                         >
                           +
                         </button>
@@ -807,35 +806,46 @@
 
                     <!-- Articles assignés -->
                     {#if payer.items.size > 0}
-                      <div class="flex flex-wrap gap-1 mb-2">
+                      <div class="space-y-2 mb-3">
                         {#each Array.from(payer.items.entries()) as [productId, qty]}
                           {@const cartItem = $cart.items.find(i => i.product.id === productId)}
                           {#if cartItem}
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-pos-primary/20 text-pos-primary rounded text-xs">
-                              {qty}× {cartItem.product.name.substring(0, 12)}{cartItem.product.name.length > 12 ? '...' : ''}
-                              <button
-                                class="hover:text-pos-danger"
-                                onclick={(e) => { e.stopPropagation(); removeItemFromPayer(productId, payer.id); }}
-                              >
-                                ×
-                              </button>
-                            </span>
+                            <div class="flex items-center gap-3 p-2 bg-pos-dark/50 rounded-xl" onclick={(e) => e.stopPropagation()}>
+                              <span class="flex-1 text-sm text-pos-text truncate">{cartItem.product.name}</span>
+                              <div class="flex items-center gap-2">
+                                <button
+                                  class="w-11 h-11 bg-pos-danger/30 text-pos-danger rounded-xl font-bold text-xl active:scale-95 transition-transform"
+                                  onclick={(e) => { e.stopPropagation(); removeItemFromPayer(productId, payer.id); }}
+                                >
+                                  −
+                                </button>
+                                <span class="w-8 text-center text-lg font-bold text-pos-text">{qty}</span>
+                                <button
+                                  class="w-11 h-11 bg-pos-success/30 text-pos-success rounded-xl font-bold text-xl disabled:opacity-30 active:scale-95 transition-transform"
+                                  onclick={(e) => { e.stopPropagation(); assignItemToPayer(productId, payer.id, qty + 1); }}
+                                  disabled={getRemainingQuantity(productId) <= 0}
+                                >
+                                  +
+                                </button>
+                              </div>
+                              <span class="text-sm font-medium text-pos-primary min-w-16 text-right">{formatPrice(cartItem.product.price * qty)}</span>
+                            </div>
                           {/if}
                         {/each}
                       </div>
                     {:else}
-                      <p class="text-xs text-gray-500 mb-2 italic">Cliquez + sur un article</p>
+                      <p class="text-sm text-gray-500 mb-3 italic text-center py-2">Touchez + sur un article</p>
                     {/if}
 
-                    <div class="flex items-center gap-2">
-                      <span class="text-lg font-bold text-pos-text flex-1">{formatPrice(payerTotal)}</span>
-                      <div class="flex gap-1">
+                    <div class="flex items-center gap-3 pt-2 border-t border-pos-accent/50">
+                      <span class="text-xl font-bold text-pos-text flex-1">{formatPrice(payerTotal)}</span>
+                      <div class="flex gap-2">
                         <button class="split-method-btn {payer.method === 'card' ? 'active' : ''}" onclick={(e) => { e.stopPropagation(); updatePayerMethod(payer.id, 'card'); }} disabled={payer.paid}>💳</button>
                         <button class="split-method-btn {payer.method === 'cash' ? 'active' : ''}" onclick={(e) => { e.stopPropagation(); updatePayerMethod(payer.id, 'cash'); }} disabled={payer.paid}>💵</button>
                         <button class="split-method-btn {payer.method === 'ticket_resto' ? 'active' : ''}" onclick={(e) => { e.stopPropagation(); updatePayerMethod(payer.id, 'ticket_resto'); }} disabled={payer.paid}>🎫</button>
                       </div>
                       {#if payer.paid}
-                        <button class="split-paid-btn paid" onclick={(e) => { e.stopPropagation(); markPayerUnpaid(payer.id); }}>✓</button>
+                        <button class="split-paid-btn paid" onclick={(e) => { e.stopPropagation(); markPayerUnpaid(payer.id); }}>✓ Payé</button>
                       {:else}
                         <button class="split-paid-btn" onclick={(e) => { e.stopPropagation(); markPayerPaid(payer.id); }} disabled={payerTotal <= 0}>OK</button>
                       {/if}
@@ -1084,39 +1094,40 @@
     border-color: rgba(46, 204, 113, 0.3);
   }
   .split-method-btn {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    font-size: 1.25rem;
     transition: all 0.15s ease;
   }
-  .split-method-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
+  .split-method-btn:active:not(:disabled) {
+    transform: scale(0.95);
   }
   .split-method-btn.active {
     background: var(--pos-primary);
     border-color: var(--pos-primary);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
   }
   .split-method-btn:disabled {
     opacity: 0.5;
   }
   .split-paid-btn {
-    padding: 0.4rem 0.6rem;
+    padding: 0.75rem 1.25rem;
     background: var(--pos-accent);
     color: var(--pos-text);
-    font-size: 0.75rem;
-    font-weight: 600;
-    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 12px;
     transition: all 0.15s ease;
+    min-width: 70px;
   }
-  .split-paid-btn:hover:not(:disabled) {
-    background: var(--pos-success);
-    color: var(--pos-dark);
+  .split-paid-btn:active:not(:disabled) {
+    transform: scale(0.95);
   }
   .split-paid-btn:disabled {
     opacity: 0.5;
